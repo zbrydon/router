@@ -4198,10 +4198,9 @@ describe('RouterOptions: sensitive', () => {
     const app = new Koa();
     const router = new Router({ prefix: '/api' });
 
-    router.use((ctx, next) => {
+    router.use((ctx) => {
       ctx.status = 401;
       ctx.body = 'blocked';
-      return next();
     });
 
     router.get('/secret', (ctx) => {
@@ -4212,23 +4211,48 @@ describe('RouterOptions: sensitive', () => {
 
     await request(http.createServer(app.callback()))
       .get('/api/secret')
-      .expect(401);
+      .expect(401, 'blocked');
 
     // The guard must also run for a differently-cased path, since routes
     // match case-insensitively by default.
     await request(http.createServer(app.callback()))
       .get('/API/secret')
-      .expect(401);
+      .expect(401, 'blocked');
+  });
+
+  it('runs pathless middleware of a mounted nested router case-insensitively', async () => {
+    const app = new Koa();
+    const parentRouter = new Router();
+    const nestedRouter = new Router();
+
+    nestedRouter.use((ctx) => {
+      ctx.status = 401;
+      ctx.body = 'blocked';
+    });
+
+    nestedRouter.get('/secret', (ctx) => {
+      ctx.body = 'secret';
+    });
+
+    parentRouter.use('/admin', nestedRouter.routes());
+    app.use(parentRouter.routes());
+
+    await request(http.createServer(app.callback()))
+      .get('/admin/secret')
+      .expect(401, 'blocked');
+
+    await request(http.createServer(app.callback()))
+      .get('/ADMIN/secret')
+      .expect(401, 'blocked');
   });
 
   it('applies sensitive option to pathless middleware when a prefix is set', async () => {
     const app = new Koa();
     const router = new Router({ prefix: '/api', sensitive: true });
 
-    router.use((ctx, next) => {
+    router.use((ctx) => {
       ctx.status = 401;
       ctx.body = 'blocked';
-      return next();
     });
 
     router.get('/secret', (ctx) => {
@@ -4239,7 +4263,7 @@ describe('RouterOptions: sensitive', () => {
 
     await request(http.createServer(app.callback()))
       .get('/api/secret')
-      .expect(401);
+      .expect(401, 'blocked');
 
     // With case-sensitive routing, neither the guard nor the route match.
     await request(http.createServer(app.callback()))
